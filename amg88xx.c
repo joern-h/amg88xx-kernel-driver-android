@@ -33,40 +33,40 @@
  * Since we're dealing with 12-bit numbers the sign-bit needs to be extended
  * for the number to be represented correctly
  */
-#define convert_to_s16(dst, src) \
-	dst = src & 0x800 ? (src | (0xf << 12)) : src
+#define convert_to_s16(dst, src) dst = src & 0x800 ? (src | (0xf << 12)) : src
 
 /* i2c register addresses */
-#define DEVICE_MODE_REG			0x00
-#define RESET_REG			0x01
-#define FRAMERATE_REG			0x02
-#define INTERRUPT_CTRL_REG		0x03
-#define STATUS_FLAG_REG			0x04 //TODO | one sysfs entry
-#define STATUS_FLAG_CLR_REG		0x05 //TODO |
-#define MOVING_AVERAGE_REG		0x07 //TODO
-#define UPPER_INTERRUPT_LOW_REG		0x08
-#define UPPER_INTERRUPT_HIGH_REG	0x09
-#define LOWER_INTERRUPT_LOW_REG		0x0a
-#define LOWER_INTERRUPT_HIGH_REG	0x0b
-#define INTERRUPT_HYST_LOW_REG		0x0c
-#define INTERRUPT_HYST_HIGH_REG		0x0d
-#define THERM_LOW_REG			0x0e
-#define THERM_HIGH_REG			0x0f
-#define PIXEL_ROW1_REG			0x10
-#define PIXEL_ROW2_REG			0x11
-#define PIXEL_ROW3_REG			0x12
-#define PIXEL_ROW4_REG			0x13
-#define PIXEL_ROW5_REG			0x14
-#define PIXEL_ROW6_REG			0x15
-#define PIXEL_ROW7_REG			0x16
-#define PIXEL_ROW8_REG			0x17
-#define SENSOR_FIRST_REG		0x80 // Pixel 1 low bits register
-#define SENSOR_LAST_REG			0xFF // Pixel 64 high bits register
+#define DEVICE_MODE_REG 0x00
+#define RESET_REG 0x01
+#define FRAMERATE_REG 0x02
+#define INTERRUPT_CTRL_REG 0x03
+#define STATUS_FLAG_REG 0x04 //TODO | one sysfs entry
+#define STATUS_FLAG_CLR_REG 0x05 //TODO |
+#define MOVING_AVERAGE_REG 0x07 //TODO
+#define UPPER_INTERRUPT_LOW_REG 0x08
+#define UPPER_INTERRUPT_HIGH_REG 0x09
+#define LOWER_INTERRUPT_LOW_REG 0x0a
+#define LOWER_INTERRUPT_HIGH_REG 0x0b
+#define INTERRUPT_HYST_LOW_REG 0x0c
+#define INTERRUPT_HYST_HIGH_REG 0x0d
+#define THERM_LOW_REG 0x0e
+#define THERM_HIGH_REG 0x0f
+#define PIXEL_ROW1_REG 0x10
+#define PIXEL_ROW2_REG 0x11
+#define PIXEL_ROW3_REG 0x12
+#define PIXEL_ROW4_REG 0x13
+#define PIXEL_ROW5_REG 0x14
+#define PIXEL_ROW6_REG 0x15
+#define PIXEL_ROW7_REG 0x16
+#define PIXEL_ROW8_REG 0x17
+#define SENSOR_FIRST_REG 0x80 // Pixel 1 low bits register
+#define SENSOR_LAST_REG 0xFF // Pixel 64 high bits register
 
 /* 
  * Low level access helper functions
  */
-static inline int amg88xx_write8(struct i2c_client *client, u8 reg_addr, u8 value)
+static inline int amg88xx_write8(struct i2c_client *client, u8 reg_addr,
+				 u8 value)
 {
 	return i2c_smbus_write_byte_data(client, reg_addr, value);
 }
@@ -97,7 +97,8 @@ static int amg88xx_read16(struct i2c_client *client, u8 regl, u8 regh)
 	return val;
 }
 
-static int amg88xx_write16(struct i2c_client *client, u8 regl, u8 regh, u16 value)
+static int amg88xx_write16(struct i2c_client *client, u8 regl, u8 regh,
+			   u16 value)
 {
 	int ret;
 
@@ -113,39 +114,32 @@ static int amg88xx_write16(struct i2c_client *client, u8 regl, u8 regh, u16 valu
  * Device configuration options that are mapped to register values
  */
 enum amg88xx_device_mode {
-	NORMAL_MODE	= 0x0,
-	SLEEP_MODE	= 0x10,
-	STANDBY60_MODE	= 0x20,
-	STANDBY10_MODE	= 0x21 };
+	NORMAL_MODE = 0x0,
+	SLEEP_MODE = 0x10,
+	STANDBY60_MODE = 0x20,
+	STANDBY10_MODE = 0x21
+};
 
-static const char *mode_strs[4] = {
-	"normal",
-	"sleep",
-	"standby_60",
-	"standby_10" };
+static const char *mode_strs[4] = { "normal", "sleep", "standby_60",
+				    "standby_10" };
 
-enum amg88xx_reset_mode {
-	PARTIAL_RST	= 0x30,
-	FULL_RST	= 0x3f };
+enum amg88xx_reset_mode { PARTIAL_RST = 0x30, FULL_RST = 0x3f };
 
-enum amg88xx_fps {
-	FPS10	= 0,
-	FPS1	= 1 };
+enum amg88xx_fps { FPS10 = 0, FPS1 = 1 };
 
 enum amg88xx_interrupt_mode {
-	DIFFERENCE_MODE		= 0, //FIXME
-	ABSOLUTE_VALUE_MODE	= 1 };
+	DIFFERENCE_MODE = 0, //FIXME
+	ABSOLUTE_VALUE_MODE = 1
+};
 
-enum amg88xx_interrupt_state {
-	INT_DISABLED	= 0,
-	INT_ENABLED	= 1 };
+enum amg88xx_interrupt_state { INT_DISABLED = 0, INT_ENABLED = 1 };
 
 /*
  * Structure for holding device related data
  */
 struct amg88xx {
-	struct i2c_client	*client;
-	struct gpio_desc	*int_gpio;
+	struct i2c_client *client;
+	struct gpio_desc *int_gpio;
 };
 
 /*
@@ -164,7 +158,8 @@ static irqreturn_t irq_handler(int irq, void *dev)
 /*
  * Helper functions for device access
  */
-static inline int amg88xx_set_dev_mode(struct amg88xx *dev, enum amg88xx_device_mode mode)
+static inline int amg88xx_set_dev_mode(struct amg88xx *dev,
+				       enum amg88xx_device_mode mode)
 {
 	return amg88xx_write8(dev->client, DEVICE_MODE_REG, mode);
 }
@@ -182,7 +177,8 @@ static int amg88xx_get_dev_mode(struct amg88xx *dev, int *result)
 	return 0;
 }
 
-static inline int amg88xx_reset(struct amg88xx *dev, enum amg88xx_reset_mode mode)
+static inline int amg88xx_reset(struct amg88xx *dev,
+				enum amg88xx_reset_mode mode)
 {
 	return amg88xx_write8(dev->client, RESET_REG, mode);
 }
@@ -204,7 +200,8 @@ static int amg88xx_get_framerate(struct amg88xx *dev, unsigned *framerate)
 	return 0;
 }
 
-static inline int amg88xx_set_framerate(struct amg88xx *dev, enum amg88xx_fps framerate)
+static inline int amg88xx_set_framerate(struct amg88xx *dev,
+					enum amg88xx_fps framerate)
 {
 	return amg88xx_write8(dev->client, FRAMERATE_REG, framerate);
 }
@@ -224,7 +221,8 @@ static int amg88xx_get_int_conf(struct amg88xx *dev, int *mode, int *enabled)
 	return 0;
 }
 
-static int amg88xx_set_int_mode(struct amg88xx *dev, enum amg88xx_interrupt_mode mode)
+static int amg88xx_set_int_mode(struct amg88xx *dev,
+				enum amg88xx_interrupt_mode mode)
 {
 	int ret;
 	u8 val;
@@ -242,7 +240,8 @@ static int amg88xx_set_int_mode(struct amg88xx *dev, enum amg88xx_interrupt_mode
 	return amg88xx_write8(dev->client, INTERRUPT_CTRL_REG, val);
 }
 
-static int amg88xx_set_int_state(struct amg88xx *dev, enum amg88xx_interrupt_state state)
+static int amg88xx_set_int_state(struct amg88xx *dev,
+				 enum amg88xx_interrupt_state state)
 {
 	int ret;
 	u8 val;
@@ -264,8 +263,7 @@ static int amg88xx_get_int_upper_limit(struct amg88xx *dev, s16 *limit)
 {
 	int ret;
 
-	ret = amg88xx_read16(dev->client, 
-			     UPPER_INTERRUPT_LOW_REG,
+	ret = amg88xx_read16(dev->client, UPPER_INTERRUPT_LOW_REG,
 			     UPPER_INTERRUPT_HIGH_REG);
 	if (ret < 0)
 		return ret;
@@ -279,8 +277,7 @@ static int amg88xx_get_int_lower_limit(struct amg88xx *dev, s16 *limit)
 {
 	int ret;
 
-	ret = amg88xx_read16(dev->client,
-			     LOWER_INTERRUPT_LOW_REG,
+	ret = amg88xx_read16(dev->client, LOWER_INTERRUPT_LOW_REG,
 			     LOWER_INTERRUPT_HIGH_REG);
 	if (ret < 0)
 		return ret;
@@ -294,8 +291,7 @@ static int amg88xx_get_int_hysteresis(struct amg88xx *dev, s16 *hysteresis)
 {
 	int ret;
 
-	ret = amg88xx_read16(dev->client,
-			     INTERRUPT_HYST_LOW_REG,
+	ret = amg88xx_read16(dev->client, INTERRUPT_HYST_LOW_REG,
 			     INTERRUPT_HYST_HIGH_REG);
 	if (ret < 0)
 		return ret;
@@ -307,26 +303,21 @@ static int amg88xx_get_int_hysteresis(struct amg88xx *dev, s16 *hysteresis)
 
 static inline int amg88xx_set_int_upper_limit(struct amg88xx *dev, s16 limit)
 {
-	return amg88xx_write16(dev->client,
-			       UPPER_INTERRUPT_LOW_REG,
-			       UPPER_INTERRUPT_HIGH_REG,
-			       limit);
+	return amg88xx_write16(dev->client, UPPER_INTERRUPT_LOW_REG,
+			       UPPER_INTERRUPT_HIGH_REG, limit);
 }
 
 static inline int amg88xx_set_int_lower_limit(struct amg88xx *dev, s16 limit)
 {
-	return amg88xx_write16(dev->client,
-			       LOWER_INTERRUPT_LOW_REG,
-			       LOWER_INTERRUPT_HIGH_REG,
-			       limit);
+	return amg88xx_write16(dev->client, LOWER_INTERRUPT_LOW_REG,
+			       LOWER_INTERRUPT_HIGH_REG, limit);
 }
 
-static inline int amg88xx_set_int_hysteresis(struct amg88xx *dev, s16 hysteresis)
+static inline int amg88xx_set_int_hysteresis(struct amg88xx *dev,
+					     s16 hysteresis)
 {
-	return amg88xx_write16(dev->client,
-			       INTERRUPT_HYST_LOW_REG,
-			       INTERRUPT_HYST_HIGH_REG,
-			       hysteresis);
+	return amg88xx_write16(dev->client, INTERRUPT_HYST_LOW_REG,
+			       INTERRUPT_HYST_HIGH_REG, hysteresis);
 }
 
 static int amg88xx_read_thermistor(struct amg88xx *dev, s16 *result)
@@ -334,7 +325,7 @@ static int amg88xx_read_thermistor(struct amg88xx *dev, s16 *result)
 	int ret;
 
 	ret = amg88xx_read16(dev->client, THERM_LOW_REG, THERM_HIGH_REG);
-	if (ret < 0) 
+	if (ret < 0)
 		return ret;
 
 	convert_to_s16(*result, ret);
@@ -366,7 +357,7 @@ static int amg88xx_read_interrupt_map(struct amg88xx *dev, u8 *res_array)
 	int i;
 	int ret;
 	u8 reg_addr = PIXEL_ROW1_REG;
-	
+
 	// Loop trough all the interrupt map registers
 	for (i = 0; i < 8; i++) {
 		ret = amg88xx_read8(dev->client, reg_addr);
@@ -408,10 +399,9 @@ static ssize_t show_sensor(struct device *dev, struct device_attribute *attr,
 			 * Write all the values on a row. Each value is sepparated by a comma
 			 * and there is newline character after the last value
 			 */
-			nwrite = scnprintf(&buf[index],
-					   PAGE_SIZE - index,
+			nwrite = scnprintf(&buf[index], PAGE_SIZE - index,
 					   col < 7 ? "%d, " : "%d\n",
-					   sensor_array[row*8 + col]);
+					   sensor_array[row * 8 + col]);
 			index += nwrite;
 		}
 	}
@@ -420,8 +410,8 @@ static ssize_t show_sensor(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR(sensor, S_IRUGO, show_sensor, NULL);
 
-static ssize_t show_thermistor(struct device *dev, struct device_attribute *attr,
-			       char *buf)
+static ssize_t show_thermistor(struct device *dev,
+			       struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	int ret;
@@ -439,13 +429,13 @@ static ssize_t show_thermistor(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR(thermistor, S_IRUGO, show_thermistor, NULL);
 
-static ssize_t show_device_mode(struct device *dev, struct device_attribute *attr,
-				char *buf)
+static ssize_t show_device_mode(struct device *dev,
+				struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	int ret;
 	int mode;
-	const char* str;
+	const char *str;
 
 	device = dev_get_drvdata(dev);
 
@@ -476,8 +466,9 @@ static ssize_t show_device_mode(struct device *dev, struct device_attribute *att
 	return scnprintf(buf, PAGE_SIZE, "%s\n", str);
 }
 
-static ssize_t store_device_mode(struct device *dev, struct device_attribute *attr,
-				 const char *buf, size_t count)
+static ssize_t store_device_mode(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t count)
 {
 	struct amg88xx *device;
 	int ret;
@@ -506,13 +497,11 @@ static ssize_t store_device_mode(struct device *dev, struct device_attribute *at
 
 	return count;
 }
-static DEVICE_ATTR(device_mode,
-		   S_IRUGO | S_IWUSR | S_IWGRP,
-		   show_device_mode,
+static DEVICE_ATTR(device_mode, S_IRUGO | S_IWUSR | S_IWGRP, show_device_mode,
 		   store_device_mode);
 
-static ssize_t show_interrupt_mode(struct device *dev, struct device_attribute *attr,
-				   char *buf)
+static ssize_t show_interrupt_mode(struct device *dev,
+				   struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	int ret;
@@ -527,13 +516,12 @@ static ssize_t show_interrupt_mode(struct device *dev, struct device_attribute *
 		return ret;
 	}
 
-	return scnprintf(buf,
-			 PAGE_SIZE,
-			 "%s\n",
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
 			 mode ? "absolute" : "differential");
 }
 
-static ssize_t store_interrupt_mode(struct device *dev, struct device_attribute *attr,
+static ssize_t store_interrupt_mode(struct device *dev,
+				    struct device_attribute *attr,
 				    const char *buf, size_t count)
 {
 	struct amg88xx *device;
@@ -559,13 +547,11 @@ static ssize_t store_interrupt_mode(struct device *dev, struct device_attribute 
 
 	return count;
 }
-static DEVICE_ATTR(interrupt_mode,
-		   S_IRUGO | S_IWUSR | S_IWGRP,
-		   show_interrupt_mode,
-		   store_interrupt_mode);
+static DEVICE_ATTR(interrupt_mode, S_IRUGO | S_IWUSR | S_IWGRP,
+		   show_interrupt_mode, store_interrupt_mode);
 
-static ssize_t show_interrupt_state(struct device *dev, struct device_attribute *attr,
-				    char *buf)
+static ssize_t show_interrupt_state(struct device *dev,
+				    struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	int ret;
@@ -580,13 +566,12 @@ static ssize_t show_interrupt_state(struct device *dev, struct device_attribute 
 		return ret;
 	}
 
-	return scnprintf(buf,
-			 PAGE_SIZE,
-			 "%s\n",
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
 			 enabled ? "enabled" : "disabled");
 }
 
-static ssize_t store_interrupt_state(struct device *dev, struct device_attribute *attr,
+static ssize_t store_interrupt_state(struct device *dev,
+				     struct device_attribute *attr,
 				     const char *buf, size_t count)
 {
 	struct amg88xx *device;
@@ -612,13 +597,11 @@ static ssize_t store_interrupt_state(struct device *dev, struct device_attribute
 
 	return count;
 }
-static DEVICE_ATTR(interrupt_state,
-		   S_IRUGO | S_IWUSR | S_IWGRP,
-		   show_interrupt_state,
-		   store_interrupt_state);
+static DEVICE_ATTR(interrupt_state, S_IRUGO | S_IWUSR | S_IWGRP,
+		   show_interrupt_state, store_interrupt_state);
 
-static ssize_t show_interrupt_levels(struct device *dev, struct device_attribute *attr,
-				     char *buf)
+static ssize_t show_interrupt_levels(struct device *dev,
+				     struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	s16 upper;
@@ -639,11 +622,13 @@ static ssize_t show_interrupt_levels(struct device *dev, struct device_attribute
 	ret = amg88xx_get_int_hysteresis(device, &hysteresis);
 	if (ret < 0)
 		return ret;
-	
-	return scnprintf(buf, PAGE_SIZE, "%d,%d,%d\n", upper, lower, hysteresis);
+
+	return scnprintf(buf, PAGE_SIZE, "%d,%d,%d\n", upper, lower,
+			 hysteresis);
 }
 
-static ssize_t store_interrupt_levels(struct device *dev, struct device_attribute *attr,
+static ssize_t store_interrupt_levels(struct device *dev,
+				      struct device_attribute *attr,
 				      const char *buf, size_t count)
 {
 	struct amg88xx *device;
@@ -659,7 +644,7 @@ static ssize_t store_interrupt_levels(struct device *dev, struct device_attribut
 		return -ENOMEM;
 
 	device = dev_get_drvdata(dev);
-	
+
 	for (i = 0; i < 3; i++) {
 		const char *substr_end;
 		size_t strl;
@@ -678,13 +663,17 @@ static ssize_t store_interrupt_levels(struct device *dev, struct device_attribut
 		ret = kstrtos16(temp, 10, &values[i]);
 		if (ret < 0) {
 			dev_err(dev, "Failed to read value for %s from input\n",
-			       i == 0 ? "upper limit" : (i == 1 ? "lower limit" : "hysteresis"));
+				i == 0 ? "upper limit" :
+					 (i == 1 ? "lower limit" :
+						   "hysteresis"));
 			goto exit;
 		}
 
 		if (values[i] < -2048 || values[i] > 2047) {
 			dev_err(dev, "Illegal input value for %s\n",
-			       i == 0 ? "upper limit" : (i == 1 ? "lower limit" : "hysteresis"));
+				i == 0 ? "upper limit" :
+					 (i == 1 ? "lower limit" :
+						   "hysteresis"));
 			ret = -EINVAL;
 			goto exit;
 		}
@@ -711,16 +700,14 @@ static ssize_t store_interrupt_levels(struct device *dev, struct device_attribut
 	}
 
 	ret = count;
-	
+
 exit:
 	kfree(temp);
 
 	return ret;
 }
-static DEVICE_ATTR(interrupt_levels,
-		   S_IRUGO | S_IWUSR | S_IWGRP,
-		   show_interrupt_levels,
-		   store_interrupt_levels);
+static DEVICE_ATTR(interrupt_levels, S_IRUGO | S_IWUSR | S_IWGRP,
+		   show_interrupt_levels, store_interrupt_levels);
 
 static ssize_t show_interrupt(struct device *dev, struct device_attribute *attr,
 			      char *buf)
@@ -735,13 +722,14 @@ static ssize_t show_interrupt(struct device *dev, struct device_attribute *attr,
 		dev_err(dev, "Failed to read interrupt gpio value\n");
 		return ret;
 	}
-	
-	return scnprintf(buf, PAGE_SIZE, "%s\n", !ret ? "active" : "not_active");
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
+			 !ret ? "active" : "not_active");
 }
 static DEVICE_ATTR(interrupt, S_IRUGO, show_interrupt, NULL);
 
-static ssize_t show_interrupt_map(struct device *dev, struct device_attribute *attr,
-				  char *buf)
+static ssize_t show_interrupt_map(struct device *dev,
+				  struct device_attribute *attr, char *buf)
 {
 	struct amg88xx *device;
 	int row;
@@ -761,10 +749,10 @@ static ssize_t show_interrupt_map(struct device *dev, struct device_attribute *a
 
 	for (row = 0; row < 8; row++) {
 		for (col = 0; col < 8; col++) {
-			nwrite = scnprintf(&buf[index],
-					   PAGE_SIZE - index,
+			nwrite = scnprintf(&buf[index], PAGE_SIZE - index,
 					   col < 7 ? "%s, " : "%s\n",
-					   int_array[row] & 1 << col ? "1" : "0");
+					   int_array[row] & 1 << col ? "1" :
+								       "0");
 			index += nwrite;
 		}
 	}
@@ -819,8 +807,9 @@ static ssize_t show_framerate(struct device *dev, struct device_attribute *attr,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", framerate);
 }
 
-static ssize_t store_framerate(struct device *dev, struct device_attribute *attr,
-			       const char *buf, size_t count)
+static ssize_t store_framerate(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
 {
 	struct amg88xx *device;
 	int fps;
@@ -834,8 +823,7 @@ static ssize_t store_framerate(struct device *dev, struct device_attribute *attr
 		return ret;
 	}
 
-	if (!(fps == 1 ||
-	      fps == 10)) {
+	if (!(fps == 1 || fps == 10)) {
 		dev_err(dev, "Invalid framerate value\n");
 		return -EINVAL;
 	}
@@ -848,9 +836,7 @@ static ssize_t store_framerate(struct device *dev, struct device_attribute *attr
 
 	return count;
 }
-static DEVICE_ATTR(framerate,
-		   S_IRUGO | S_IWUSR | S_IWGRP,
-		   show_framerate,
+static DEVICE_ATTR(framerate, S_IRUGO | S_IWUSR | S_IWGRP, show_framerate,
 		   store_framerate);
 
 // TODO all the rest of the sysfs stuff
@@ -887,17 +873,15 @@ static int amg88xx_probe_new(struct i2c_client *client)
 
 	device->int_gpio = devm_gpiod_get(&client->dev, "interrupt", GPIOD_IN);
 	if (IS_ERR(device->int_gpio)) {
-		dev_err(&client->dev, "Failed to get a gpio line for interrupt\n");
+		dev_err(&client->dev,
+			"Failed to get a gpio line for interrupt\n");
 		return PTR_ERR(device->int_gpio);
 	}
 
-	ret = devm_request_threaded_irq(&client->dev,
-					client->irq,
-					NULL,
-					irq_handler,
-					IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
-					client->name,
-					device);
+	ret = devm_request_threaded_irq(
+		&client->dev, client->irq, NULL, irq_handler,
+		IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_FALLING, client->name,
+		device);
 	if (ret < 0) {
 		dev_err(&client->dev, "Failed to request a threaded irq\n");
 		return ret;
@@ -933,7 +917,6 @@ static int amg88xx_remove(struct i2c_client *client)
 
 	return 0;
 }
-
 
 static const struct i2c_device_id amg88xx_id_table[] = {
 	{ "amg88xx", 0 },
