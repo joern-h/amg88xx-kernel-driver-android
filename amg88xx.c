@@ -18,51 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <linux/device.h>
-#include <linux/gpio/consumer.h>
-#include <linux/init.h>
-#include <linux/interrupt.h>
-#include <linux/i2c.h>
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-
-#define DRIVER_NAME "amg88xx"
+#include <amg88xx.h>
 
 /*
- * Since we're dealing with 12-bit numbers the sign-bit needs to be extended
- * for the number to be represented correctly
- */
-#define convert_to_s16(dst, src) dst = src & 0x800 ? (src | (0xf << 12)) : src
-
-/* i2c register addresses */
-#define DEVICE_MODE_REG 0x00
-#define RESET_REG 0x01
-#define FRAMERATE_REG 0x02
-#define INTERRUPT_CTRL_REG 0x03
-#define STATUS_FLAG_REG 0x04 //TODO | one sysfs entry
-#define STATUS_FLAG_CLR_REG 0x05 //TODO |
-#define MOVING_AVERAGE_REG 0x07 //TODO
-#define UPPER_INTERRUPT_LOW_REG 0x08
-#define UPPER_INTERRUPT_HIGH_REG 0x09
-#define LOWER_INTERRUPT_LOW_REG 0x0a
-#define LOWER_INTERRUPT_HIGH_REG 0x0b
-#define INTERRUPT_HYST_LOW_REG 0x0c
-#define INTERRUPT_HYST_HIGH_REG 0x0d
-#define THERM_LOW_REG 0x0e
-#define THERM_HIGH_REG 0x0f
-#define PIXEL_ROW1_REG 0x10
-#define PIXEL_ROW2_REG 0x11
-#define PIXEL_ROW3_REG 0x12
-#define PIXEL_ROW4_REG 0x13
-#define PIXEL_ROW5_REG 0x14
-#define PIXEL_ROW6_REG 0x15
-#define PIXEL_ROW7_REG 0x16
-#define PIXEL_ROW8_REG 0x17
-#define SENSOR_FIRST_REG 0x80 // Pixel 1 low bits register
-#define SENSOR_LAST_REG 0xFF // Pixel 64 high bits register
-
-/* 
  * Low level access helper functions
  */
 static inline int amg88xx_write8(struct i2c_client *client, u8 reg_addr,
@@ -109,38 +67,6 @@ static int amg88xx_write16(struct i2c_client *client, u8 regl, u8 regh,
 
 	return amg88xx_write8(client, regh, (u8)(value >> 8));
 }
-
-/* 
- * Device configuration options that are mapped to register values
- */
-enum amg88xx_device_mode {
-	NORMAL_MODE = 0x0,
-	SLEEP_MODE = 0x10,
-	STANDBY60_MODE = 0x20,
-	STANDBY10_MODE = 0x21
-};
-
-static const char *mode_strs[4] = { "normal", "sleep", "standby_60",
-				    "standby_10" };
-
-enum amg88xx_reset_mode { PARTIAL_RST = 0x30, FULL_RST = 0x3f };
-
-enum amg88xx_fps { FPS10 = 0, FPS1 = 1 };
-
-enum amg88xx_interrupt_mode {
-	DIFFERENCE_MODE = 0, //FIXME
-	ABSOLUTE_VALUE_MODE = 1
-};
-
-enum amg88xx_interrupt_state { INT_DISABLED = 0, INT_ENABLED = 1 };
-
-/*
- * Structure for holding device related data
- */
-struct amg88xx {
-	struct i2c_client *client;
-	struct gpio_desc *int_gpio;
-};
 
 /*
  * Handler for the threaded irq
@@ -371,7 +297,7 @@ static int amg88xx_read_interrupt_map(struct amg88xx *dev, u8 *res_array)
 	return 0;
 }
 
-/* 
+/*
  * sysfs entries and the functions to implement them
  */
 static ssize_t show_sensor(struct device *dev, struct device_attribute *attr,
@@ -395,7 +321,7 @@ static ssize_t show_sensor(struct device *dev, struct device_attribute *attr,
 
 	for (row = 0; row < 8; row++) {
 		for (col = 0; col < 8; col++) {
-			/* 
+			/*
 			 * Write all the values on a row. Each value is sepparated by a comma
 			 * and there is newline character after the last value
 			 */
@@ -533,7 +459,7 @@ static ssize_t store_interrupt_mode(struct device *dev,
 	if (sysfs_streq("absolute", buf)) {
 		mode = ABSOLUTE_VALUE_MODE;
 	} else if (sysfs_streq("differential", buf)) {
-		mode = DIFFERENCE_MODE; //FIXME
+		mode = DIFFERENCE_MODE; // FIXME
 	} else {
 		dev_err(dev, "Invalid interrupt mode\n");
 		return -EINVAL;
@@ -649,7 +575,7 @@ static ssize_t store_interrupt_levels(struct device *dev,
 		const char *substr_end;
 		size_t strl;
 
-		/* 
+		/*
 		 * Calculate the length of the substring and copy it adding a null
 		 * terminator to the end
 		 */
@@ -840,7 +766,6 @@ static DEVICE_ATTR(framerate, S_IRUGO | S_IWUSR | S_IWGRP, show_framerate,
 		   store_framerate);
 
 // TODO all the rest of the sysfs stuff
-
 static struct attribute *amg88xx_attrs[] = {
 	&dev_attr_sensor.attr,
 	&dev_attr_thermistor.attr,
@@ -860,22 +785,222 @@ static const struct attribute_group amg88xx_attr_group = {
 	.attrs = amg88xx_attrs,
 };
 
-static int amg88xx_probe_new(struct i2c_client *client)
+static int amg88xx_pinctrl_select_normal(struct amg88xx *dev)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+
+	if (dev->pinctrl && dev->pins_active) {
+		ret = pinctrl_select_state(dev->pinctrl, dev->pins_active);
+		if (ret < 0) {
+			AMG_ERROR("Set normal pin state error:%d", ret);
+		}
+	}
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_pinctrl_select_suspend(struct amg88xx *dev)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+
+	if (dev->pinctrl && dev->pins_suspend) {
+		ret = pinctrl_select_state(dev->pinctrl, dev->pins_suspend);
+		if (ret < 0) {
+			AMG_ERROR("Set suspend pin state error:%d", ret);
+		}
+	}
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_pinctrl_select_release(struct amg88xx *dev)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+
+	if (dev->pinctrl && dev->pins_release) {
+		ret = pinctrl_select_state(dev->pinctrl, dev->pins_release);
+		if (ret < 0) {
+			AMG_ERROR("Set release pin state error:%d", ret);
+		}
+	}
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_pinctrl_init(struct amg88xx *dev)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+
+	dev->pinctrl = devm_pinctrl_get(dev->dev);
+	if (IS_ERR_OR_NULL(dev->pinctrl)) {
+		AMG_ERROR("Failed to get pinctrl, please check dts");
+		ret = PTR_ERR(dev->pinctrl);
+		goto err_pinctrl_get;
+	}
+
+	dev->pins_active =
+		pinctrl_lookup_state(dev->pinctrl, "amg88xx_sens_active");
+	if (IS_ERR_OR_NULL(dev->pins_active)) {
+		AMG_ERROR("Pin state[active] not found");
+		ret = PTR_ERR(dev->pins_active);
+		goto err_pinctrl_lookup;
+	}
+
+	dev->pins_suspend =
+		pinctrl_lookup_state(dev->pinctrl, "amg88xx_sens_suspend");
+	if (IS_ERR_OR_NULL(dev->pins_suspend)) {
+		AMG_ERROR("Pin state[suspend] not found");
+		ret = PTR_ERR(dev->pins_suspend);
+		goto err_pinctrl_lookup;
+	}
+
+	dev->pins_release =
+		pinctrl_lookup_state(dev->pinctrl, "amg88xx_sens_release");
+	if (IS_ERR_OR_NULL(dev->pins_release)) {
+		AMG_ERROR("Pin state[release] not found");
+		ret = PTR_ERR(dev->pins_release);
+	}
+
+	AMG_FUNC_EXIT();
+	return 0;
+err_pinctrl_lookup:
+	if (dev->pinctrl) {
+		devm_pinctrl_put(dev->pinctrl);
+	}
+err_pinctrl_get:
+	dev->pinctrl = NULL;
+	dev->pins_release = NULL;
+	dev->pins_suspend = NULL;
+	dev->pins_active = NULL;
+	AMG_FUNC_EXIT();
+	return ret;
+
+	AMG_FUNC_EXIT();
+	return 0;
+}
+
+static int amg88xx_power_source_ctrl(struct amg88xx *dev, int enable)
+{
+	int ret = 0;
+
+	AMG_FUNC_ENTER();
+	if (enable) {
+		if (dev->power_disabled) {
+			AMG_DEBUG("regulator enable !");
+
+			if (!IS_ERR_OR_NULL(dev->vcc_i2c)) {
+				ret = regulator_enable(dev->vcc_i2c);
+				if (ret) {
+					AMG_ERROR(
+						"enable vcc_i2c regulator failed,ret=%d",
+						ret);
+				}
+			}
+			dev->power_disabled = false;
+		}
+	} else {
+		if (!dev->power_disabled) {
+			AMG_DEBUG("regulator disable !");
+			if (!IS_ERR_OR_NULL(dev->vcc_i2c)) {
+				ret = regulator_disable(dev->vcc_i2c);
+				if (ret) {
+					AMG_ERROR(
+						"disable vcc_i2c regulator failed,ret=%d",
+						ret);
+				}
+			}
+			dev->power_disabled = true;
+		}
+	}
+
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_power_source_exit(struct amg88xx *dev)
+{
+	amg88xx_pinctrl_select_release(dev);
+
+	amg88xx_power_source_ctrl(dev, DISABLE);
+
+	if (!IS_ERR_OR_NULL(dev->vcc_i2c)) {
+		if (regulator_count_voltages(dev->vcc_i2c) > 0)
+			regulator_set_voltage(dev->vcc_i2c, 0,
+					      AMG_I2C_VTG_MAX_UV);
+		regulator_put(dev->vcc_i2c);
+	}
+
+	return 0;
+}
+
+static int amg88xx_power_source_init(struct amg88xx *dev)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+	dev->vcc_i2c = regulator_get(dev->dev, "vcc_i2c");
+	if (!IS_ERR_OR_NULL(dev->vcc_i2c)) {
+		AMG_ERROR("%s%d ", __func__, __LINE__);
+		if (regulator_count_voltages(dev->vcc_i2c) > 0) {
+			ret = regulator_set_voltage(dev->vcc_i2c,
+						    AMG_I2C_VTG_MIN_UV,
+						    AMG_I2C_VTG_MAX_UV);
+			if (ret) {
+				AMG_ERROR(
+					"vcc_i2c regulator set_vtg failed,ret=%d",
+					ret);
+				regulator_put(dev->vcc_i2c);
+			}
+		}
+	}
+
+	amg88xx_pinctrl_init(dev);
+	amg88xx_pinctrl_select_normal(dev);
+
+	dev->power_disabled = true;
+	ret = amg88xx_power_source_ctrl(dev, ENABLE);
+	if (ret) {
+		AMG_ERROR("fail to enable power(regulator)");
+	}
+	AMG_ERROR("%s%d ", __func__, __LINE__);
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_probe(struct i2c_client *client,
+			 const struct i2c_device_id *id)
 {
 	int ret;
-	struct amg88xx *device;
+	struct amg88xx *device = NULL;
+	AMG_FUNC_ENTER();
 
-	device = devm_kzalloc(&client->dev, sizeof(*device), GFP_KERNEL);
-	if (device == NULL)
+	device = (struct amg88xx *)kzalloc(sizeof(*device), GFP_KERNEL);
+	if (device == NULL) {
+		AMG_ERROR("device is NULL");
 		return -ENOMEM;
-	else
+	} else {
 		device->client = client;
+	}
+
+	device->dev = &client->dev;
+
+	i2c_set_clientdata(client, device);
+
+	ret = amg88xx_power_source_init(device);
+	if (ret) {
+		AMG_ERROR("power init fail");
+		goto err_init;
+	}
 
 	device->int_gpio = devm_gpiod_get(&client->dev, "interrupt", GPIOD_IN);
 	if (IS_ERR(device->int_gpio)) {
+		AMG_ERROR("Failed to get a gpio line for interrupt");
 		dev_err(&client->dev,
 			"Failed to get a gpio line for interrupt\n");
-		return PTR_ERR(device->int_gpio);
+		goto err_init;
 	}
 
 	ret = devm_request_threaded_irq(
@@ -883,8 +1008,9 @@ static int amg88xx_probe_new(struct i2c_client *client)
 		IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_FALLING, client->name,
 		device);
 	if (ret < 0) {
+		AMG_ERROR("Failed to request a threaded irq");
 		dev_err(&client->dev, "Failed to request a threaded irq\n");
-		return ret;
+		goto err_init;
 	}
 
 	dev_set_drvdata(&client->dev, device);
@@ -892,55 +1018,89 @@ static int amg88xx_probe_new(struct i2c_client *client)
 	ret = amg88xx_reset(device, PARTIAL_RST);
 	if (ret < 0) {
 		dev_err(&client->dev, "Failed to reset device\n");
-		return ret;
+		goto err_init;
 	}
 
-	ret = devm_device_add_group(&client->dev, &amg88xx_attr_group);
-	if (ret < 0) {
-		dev_err(&client->dev, "Failed to add sysfs attributes\n");
-		return ret;
+	ret = sysfs_create_group(&client->dev.kobj, &amg88xx_attr_group);
+	if (ret) {
+		AMG_ERROR("[EX]: sysfs_create_group() failed!!");
+		sysfs_remove_group(&client->dev.kobj, &amg88xx_attr_group);
+		goto err_init;
 	}
+	AMG_INFO("INIT SUCCESS");
 
+	AMG_FUNC_EXIT();
+	return 0;
+err_init:
+	amg88xx_power_source_exit(device);
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static int amg88xx_remove_entry(struct amg88xx *dev)
+{
+	amg88xx_set_dev_mode(dev, SLEEP_MODE);
+
+	// remove sysfs
+	sysfs_remove_group(&dev->client->dev.kobj, &amg88xx_attr_group);
+
+	amg88xx_pinctrl_select_suspend(dev);
+	amg88xx_power_source_exit(dev);
 	return 0;
 }
 
 static int amg88xx_remove(struct i2c_client *client)
 {
-	int ret;
-	struct amg88xx *device = dev_get_drvdata(&client->dev);
-
-	ret = amg88xx_set_dev_mode(device, SLEEP_MODE);
-	if (ret < 0) {
-		dev_err(&client->dev, "Failed to put the device to sleep\n");
-		return ret;
-	}
-
-	return 0;
+	return amg88xx_remove_entry(i2c_get_clientdata(client));
 }
 
 static const struct i2c_device_id amg88xx_id_table[] = {
-	{ "amg88xx", 0 },
+	{ DRIVER_NAME, 0 },
 	{},
 };
+
 MODULE_DEVICE_TABLE(i2c, amg88xx_id_table);
 
 static const struct of_device_id amg88xx_of_match[] = {
-	{ .compatible = "panasonic,amg88xx" },
+	{
+		.compatible = "panasonic,amg88xx",
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, amg88xx_of_match);
 
 static struct i2c_driver amg88xx_driver = {
+	.probe = amg88xx_probe,
+	.remove = amg88xx_remove,
 	.driver = {
-		.owner		= THIS_MODULE,
-		.name		= DRIVER_NAME,
-		.of_match_table	= of_match_ptr(amg88xx_of_match),
+		.name = DRIVER_NAME,
+		.owner = THIS_MODULE,
+		.of_match_table = of_match_ptr(amg88xx_of_match),
 	},
-	.probe_new = amg88xx_probe_new,
-	.remove	   = amg88xx_remove,
-	.id_table  = amg88xx_id_table,
+	.id_table = amg88xx_id_table,
 };
-module_i2c_driver(amg88xx_driver);
+
+static int __init amg88xx_init(void)
+{
+	int ret = 0;
+	AMG_FUNC_ENTER();
+	ret = i2c_add_driver(&amg88xx_driver);
+	if (ret != 0) {
+		AMG_ERROR("amg88xx driver init failed");
+	}
+	AMG_FUNC_EXIT();
+	return ret;
+}
+
+static void __exit amg88xx_exit(void)
+{
+	AMG_FUNC_ENTER();
+	i2c_del_driver(&amg88xx_driver);
+	AMG_FUNC_EXIT();
+}
+
+module_init(amg88xx_init);
+module_exit(amg88xx_exit);
 
 MODULE_VERSION("1.0");
 MODULE_AUTHOR("Iiro Vuorio <iiro.vuorio@gmail.com>");
